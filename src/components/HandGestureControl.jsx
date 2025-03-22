@@ -8,8 +8,8 @@ function calculateHandGestures(landmarks, prevThumbTip, prevIndexFingerTip) {
     // Calculate rotation and zoom based on hand landmarks
     const thumbTip = landmarks[4];
     const indexFingerTip = landmarks[8];
-    window.console.log(prevThumbTip)
-    window.console.log(prevIndexFingerTip)
+    // window.console.log(prevThumbTip)
+    // window.console.log(prevIndexFingerTip)
 
     if (!prevThumbTip || !prevIndexFingerTip) {
 
@@ -47,7 +47,7 @@ function calculateHandGestures(landmarks, prevThumbTip, prevIndexFingerTip) {
         else if (pinchScale >=1.5) {
             pinchScale/1.5;
         }
-        isPinching = true;
+        isPinching = false;
     }
 
     // Calculate rotation based on hand movement - more stable than previous implementation
@@ -55,11 +55,12 @@ function calculateHandGestures(landmarks, prevThumbTip, prevIndexFingerTip) {
         x: 0,
         y: 0
     };
-    let x = (indexFingerTip.x - prevIndexFingerTip.x) * 20;
+    let x = (indexFingerTip.x - prevIndexFingerTip.x) * 27.6666667;
     let y = (indexFingerTip.y - prevIndexFingerTip.y) * 20;
 
-    rotation.x = y;
-    rotation.y = x;
+    rotation.y = Math.abs(x) > 0.2 ? x : 0;
+    rotation.x = Math.abs(y) > 0.2 ? y : 0;
+    console.log(rotation)
     return {
         isPinching,
         pinchScale,
@@ -182,7 +183,7 @@ function HandGestureControl({ onGestureStatusChange, webcamRef,down }) {
                 pinchScale: gestures.pinchScale,
                 rotation: gestures.rotation
             });
-            window.console.log(gestures)
+            //window.console.log(gestures)
 
             // Update refs for next frame
             prevThumbTipRef.current = gestures.currentThumbTip;
