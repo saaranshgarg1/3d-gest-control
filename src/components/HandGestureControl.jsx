@@ -36,11 +36,17 @@ function calculateHandGestures(landmarks, prevThumbTip, prevIndexFingerTip) {
     );
     pinchScale = currentDistance / prevDistance;
     var isPinching = false;
-    if (pinchScale >0.8 && pinchScale < 1.2) {
+    if (pinchScale >0.5 && pinchScale < 1.5) {
         pinchScale = 0;
         isPinching = false;
     }
     else {
+        if (pinchScale <=0.5) {
+            pinchScale*2;
+        }
+        else if (pinchScale >=1.5) {
+            pinchScale/1.5;
+        }
         isPinching = true;
     }
 
@@ -64,7 +70,7 @@ function calculateHandGestures(landmarks, prevThumbTip, prevIndexFingerTip) {
     };
 }
 
-function HandGestureControl({ onGestureStatusChange, webcamRef }) {
+function HandGestureControl({ onGestureStatusChange, webcamRef,down }) {
     const [gestureData, setGestureData] = useState({
         isPinching: false,
         pinchScale: 1.0,
@@ -144,7 +150,7 @@ function HandGestureControl({ onGestureStatusChange, webcamRef }) {
         const checkWebcamReady = setInterval(() => {
             if (webcamRef.current && webcamRef.current.video && webcamRef.current.video.readyState === 4) {
                 clearInterval(checkWebcamReady);
-                initializeMediaPipe();
+                if (down) initializeMediaPipe();
             }
         }, 100);
 
@@ -183,10 +189,10 @@ function HandGestureControl({ onGestureStatusChange, webcamRef }) {
             prevIndexFingerTipRef.current = gestures.currentIndexFingerTip;
 
             // Update status message
-            onGestureStatusChange(gestures.isPinching ? 'Pinching - Zoom' : 'Hand detected - Rotate');
+            onGestureStatusChange(gestures.isPinching ? 'Pinching - Zoom' : 'Hand detected - Rotate', false);
         } else {
             // No hands detected
-            onGestureStatusChange('No hands detected');
+            onGestureStatusChange('No hands detected', false);
             prevThumbTipRef.current = null;
             prevIndexFingerTipRef.current = null;
         }

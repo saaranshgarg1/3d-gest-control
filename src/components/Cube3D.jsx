@@ -90,52 +90,41 @@ function Cube3D({ gestureData }) {
     if (!cube || !scene || !camera || !renderer) return;
     
     let animationId;
-    let targetRotationX = cube.rotation.x;
-    let targetRotationY = cube.rotation.y;
+    const quaternion = new THREE.Quaternion(); // Create a quaternion for smoother rotation
     let targetScale = cube.scale.x;
     let isAutoRotating = !gestureData; // Track if we're in auto-rotation mode
     
     // Auto-rotation parameters
     const rotationSpeed = 0.005;
-    const autoRotateDamping = 0.95; // Damping factor for smoother transition
-    
-    // Keep track of the current auto-rotation velocity
-    const autoRotVelocity = { x: rotationSpeed, y: rotationSpeed };
     
     const animate = () => {
       animationId = requestAnimationFrame(animate);
       
       if (gestureData) {
-        // Gradually turn off auto-rotation
-        autoRotVelocity.x *= autoRotateDamping;
-        autoRotVelocity.y *= autoRotateDamping;
-        
         // Apply hand gesture data
         if (gestureData.isPinching) {
           // Zoom with pinch - with improved dampening
           targetScale = Math.max(0.5, Math.min(2.5, gestureData.pinchScale * targetScale));
         } else {
-          // Rotate with hand - smoother rotation
-          targetRotationX += gestureData.rotation.x * 0.05; 
-          targetRotationY += gestureData.rotation.y * 0.05;
+          // Use quaternion for rotation - similar to your example
+          const rotX = gestureData.rotation.x/30 ; 
+          const rotY = gestureData.rotation.y/30 ;
+          const rotZ = 0; // You can use a z rotation if you have that data
+          
+          // Create a quaternion from Euler angles and apply it to the current rotation
+          quaternion.setFromEuler(new THREE.Euler(rotX, rotY, rotZ));
+          cube.quaternion.multiplyQuaternions(quaternion, cube.quaternion);
         }
         
         isAutoRotating = false;
-      } else if (!isAutoRotating) {
-        // Transition to auto-rotation smoothly
-        autoRotVelocity.x = (autoRotVelocity.x * 0.95) + (rotationSpeed * 0.05);
-        autoRotVelocity.y = (autoRotVelocity.y * 0.95) + (rotationSpeed * 0.05);
-        isAutoRotating = autoRotVelocity.x > rotationSpeed * 0.9;
+      } else if (isAutoRotating) {
+        // Auto-rotation using quaternions
+        quaternion.setFromEuler(new THREE.Euler(rotationSpeed, rotationSpeed, 0));
+        cube.quaternion.multiplyQuaternions(quaternion, cube.quaternion);
       } else {
-        // Full auto-rotation
-        targetRotationX += autoRotVelocity.x;
-        targetRotationY += autoRotVelocity.y;
+        // Transition to auto-rotation
+        isAutoRotating = true;
       }
-      
-      // Smooth transition to target values - adaptive smoothing
-      const rotationLerpFactor = gestureData ? 0.15 : 0.05;
-      cube.rotation.x += (targetRotationX - cube.rotation.x) * rotationLerpFactor;
-      cube.rotation.y += (targetRotationY - cube.rotation.y) * rotationLerpFactor;
       
       // Apply scale uniformly to all axes with improved smoothing
       const currentScale = cube.scale.x;
