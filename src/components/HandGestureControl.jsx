@@ -1,96 +1,228 @@
 import { useEffect, useRef, useState } from 'react';
-import { Camera } from '@mediapipe/camera_utils';
 import { Hands } from '@mediapipe/hands';
+import { Camera } from '@mediapipe/camera_utils';
 import Cube3D from './Cube3D';
-import { calculateHandGestures } from '../utils/handGestureUtils';
+import Webcam from 'react-webcam';
 
-function HandGestureControl({ onGestureStatusChange }) {
-  const videoRef = useRef(null);
-  const [cameraReady, setCameraReady] = useState(false);
-  const [gestureData, setGestureData] = useState(null);
-  
-  useEffect(() => {
-    // Initialize MediaPipe Hands
-    const hands = new Hands({
-      locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-      }
-    });
-    
-    hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
-    
-    // Handle results from hand detection
-    hands.onResults((results) => {
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        const landmarks = results.multiHandLandmarks[0];
-        const handedness = results.multiHandedness[0].label;
-        
-        // Process landmarks to get rotation and zoom data
-        const gestureInfo = calculateHandGestures(landmarks, handedness);
-        setGestureData(gestureInfo);
-        
-        if (gestureInfo.isPinching) {
-          onGestureStatusChange(`Pinching - Zoom: ${gestureInfo.pinchScale.toFixed(2)}`);
-        } else {
-          onGestureStatusChange(`Rotating - X: ${gestureInfo.rotation.x.toFixed(2)}, Y: ${gestureInfo.rotation.y.toFixed(2)}`);
-        }
-      } else {
-        onGestureStatusChange('No hands detected');
-        setGestureData(null);
-      }
-    });
-    
-    // Set up camera if video element is available
-    if (videoRef.current) {
-      const camera = new Camera(videoRef.current, {
-        onFrame: async () => {
-          await hands.send({ image: videoRef.current });
-        },
-        width: 640,
-        height: 480
-      });
-      
-      camera.start()
-        .then(() => {
-          setCameraReady(true);
-        })
-        .catch((err) => {
-          console.error("Error starting camera:", err);
-          onGestureStatusChange('Camera error: ' + err.message);
-        });
-      
-      // Cleanup function
-      return () => {
-        camera.stop();
-        hands.close();
-      };
+function calculateHandGestures(landmarks, prevThumbTip, prevIndexFingerTip) {
+    // Calculate rotation and zoom based on hand landmarks
+    const thumbTip = landmarks[4];
+    const indexFingerTip = landmarks[8];
+    window.console.log(prevThumbTip)
+    window.console.log(prevIndexFingerTip)
+
+    if (!prevThumbTip || !prevIndexFingerTip) {
+
+        return {
+            isPinching: true,
+            pinchScale: 1.0,
+            rotation: { x: 0, y: 0 },
+            currentThumbTip: thumbTip,
+            currentIndexFingerTip: indexFingerTip
+        };
     }
-  }, [onGestureStatusChange]);
-  
-  return (
-    <div className="gesture-container">
-      <div className="canvas-container">
-        <Cube3D gestureData={gestureData} />
-      </div>
-      <div className="video-container">
-        <video
-          ref={videoRef}
-          className="camera-feed"
-          playsInline
-        ></video>
-        {!cameraReady && (
-          <div className="camera-loading">
-            Loading camera...
-          </div>
-        )}
-      </div>
-    </div>
-  );
+
+    // Calculate scale for pinch-to-zoom with smoothing
+    let pinchScale = 1.0;
+    const prevDistance = Math.sqrt(
+        (prevThumbTip.x - prevIndexFingerTip.x) ** 2 +
+        (prevThumbTip.y - prevIndexFingerTip.y) ** 2 +
+        (prevThumbTip.z - prevIndexFingerTip.z) ** 2
+    );
+    const currentDistance = Math.sqrt(
+        (thumbTip.x - indexFingerTip.x) ** 2 +
+        (thumbTip.y - indexFingerTip.y) ** 2 +
+        (thumbTip.z - indexFingerTip.z) ** 2
+    );
+    pinchScale = currentDistance / prevDistance;
+    var isPinching = false;
+    if (pinchScale >0.8 && pinchScale < 1.2) {
+        pinchScale = 0;
+        isPinching = false;
+    }
+    else {
+        isPinching = true;
+    }
+
+    // Calculate rotation based on hand movement - more stable than previous implementation
+    const rotation = {
+        x: 0,
+        y: 0
+    };
+    let x = (indexFingerTip.x - prevIndexFingerTip.x) * 20;
+    let y = (indexFingerTip.y - prevIndexFingerTip.y) * 20;
+
+    rotation.x = y;
+    rotation.y = x;
+    return {
+        isPinching,
+        pinchScale,
+        rotation,
+        // Return current positions to be saved for next frame
+        currentThumbTip: thumbTip,
+        currentIndexFingerTip: indexFingerTip
+    };
+}
+
+function HandGestureControl({ onGestureStatusChange, webcamRef }) {
+    const [gestureData, setGestureData] = useState({
+        isPinching: false,
+        pinchScale: 1.0,
+        rotation: { x: 0, y: 0 }
+    });
+    const [cameraError, setCameraError] = useState(null);
+    const [isMediaPipeLoading, setIsMediaPipeLoading] = useState(true);
+    const prevThumbTipRef = useRef(null);
+    const prevIndexFingerTipRef = useRef(null);
+    const handsRef = useRef(null);
+    const cameraRef = useRef(null);
+
+    useEffect(() => {
+        if (!webcamRef.current) return;
+
+        // Cleanup function to handle component unmounting
+        let isMounted = true;
+
+        const initializeMediaPipe = async () => {
+            try {
+                // Initialize MediaPipe Hands
+                const hands = new Hands({
+                    locateFile: (file) => {
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`;
+                    }
+                });
+
+                hands.setOptions({
+                    selfieMode: true,
+                    maxNumHands: 1,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+
+                // Set up results handler before attaching to camera
+                hands.onResults((results) => {
+                    if (!isMounted) return;
+                    handleHandResults(results);
+                });
+
+                // Wait for hands model to fully load
+                await hands.initialize();
+
+                if (isMounted) {
+                    handsRef.current = hands;
+                    setIsMediaPipeLoading(false);
+
+                    // After MediaPipe is loaded and initialized, setup camera
+                    if (webcamRef.current && webcamRef.current.video) {
+                        const camera = new Camera(webcamRef.current.video, {
+                            onFrame: async () => {
+                                if (!handsRef.current || !webcamRef.current?.video) return;
+                                try {
+                                    await handsRef.current.send({ image: webcamRef.current.video });
+                                } catch (err) {
+                                    console.error("Error sending frame to MediaPipe:", err);
+                                }
+                            },
+                            width: 640,
+                            height: 480
+                        });
+                        cameraRef.current = camera;
+                        camera.start();
+                    }
+                }
+            } catch (error) {
+                console.error("Error initializing MediaPipe:", error);
+                if (isMounted) {
+                    setCameraError("Failed to initialize hand detection. Please refresh the page.");
+                    setIsMediaPipeLoading(false);
+                }
+            }
+        };
+
+        // Start initialization once webcam is ready
+        const checkWebcamReady = setInterval(() => {
+            if (webcamRef.current && webcamRef.current.video && webcamRef.current.video.readyState === 4) {
+                clearInterval(checkWebcamReady);
+                initializeMediaPipe();
+            }
+        }, 100);
+
+        return () => {
+            isMounted = false;
+            clearInterval(checkWebcamReady);
+            if (cameraRef.current) {
+                cameraRef.current.stop();
+            }
+            if (handsRef.current) {
+                handsRef.current.close();
+            }
+        };
+    }, [webcamRef]);
+
+    const handleHandResults = (results) => {
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            // Process detected hand
+            const landmarks = results.multiHandLandmarks[0];
+
+            const gestures = calculateHandGestures(
+                landmarks,
+                prevThumbTipRef.current,
+                prevIndexFingerTipRef.current
+            );
+
+            setGestureData({
+                isPinching: gestures.isPinching,
+                pinchScale: gestures.pinchScale,
+                rotation: gestures.rotation
+            });
+            window.console.log(gestures)
+
+            // Update refs for next frame
+            prevThumbTipRef.current = gestures.currentThumbTip;
+            prevIndexFingerTipRef.current = gestures.currentIndexFingerTip;
+
+            // Update status message
+            onGestureStatusChange(gestures.isPinching ? 'Pinching - Zoom' : 'Hand detected - Rotate');
+        } else {
+            // No hands detected
+            onGestureStatusChange('No hands detected');
+            prevThumbTipRef.current = null;
+            prevIndexFingerTipRef.current = null;
+        }
+    };
+
+    return (
+        <div className="gesture-container">
+            <div className="canvas-container">
+                <Cube3D gestureData={gestureData} />
+            </div>
+            <div className="video-container">
+                <Webcam
+                    ref={webcamRef}
+                    className="camera-feed"
+                    playsInline
+                    style={{
+                        transform: 'scaleX(-1)',
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                    }}
+                />
+                {isMediaPipeLoading && (
+                    <div className="loading-overlay">
+                        <p>Loading hand tracking system...</p>
+                    </div>
+                )}
+                {cameraError && (
+                    <div className="camera-error">
+                        Error: {cameraError}
+                        <p>Please ensure camera permissions are granted and try again.</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
 }
 
 export default HandGestureControl;

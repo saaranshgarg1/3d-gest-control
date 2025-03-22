@@ -93,40 +93,56 @@ function Cube3D({ gestureData }) {
     let targetRotationX = cube.rotation.x;
     let targetRotationY = cube.rotation.y;
     let targetScale = cube.scale.x;
+    let isAutoRotating = !gestureData; // Track if we're in auto-rotation mode
     
-    // Default rotation if no gestures
+    // Auto-rotation parameters
     const rotationSpeed = 0.005;
+    const autoRotateDamping = 0.95; // Damping factor for smoother transition
+    
+    // Keep track of the current auto-rotation velocity
+    const autoRotVelocity = { x: rotationSpeed, y: rotationSpeed };
     
     const animate = () => {
       animationId = requestAnimationFrame(animate);
       
       if (gestureData) {
+        // Gradually turn off auto-rotation
+        autoRotVelocity.x *= autoRotateDamping;
+        autoRotVelocity.y *= autoRotateDamping;
+        
         // Apply hand gesture data
         if (gestureData.isPinching) {
-          // Zoom with pinch
-          targetScale = Math.max(0.5, Math.min(2.5, gestureData.pinchScale));
+          // Zoom with pinch - with improved dampening
+          targetScale = Math.max(0.5, Math.min(2.5, gestureData.pinchScale * targetScale));
         } else {
-          // Rotate with hand
-          targetRotationX = gestureData.rotation.x;
-          targetRotationY = gestureData.rotation.y;
+          // Rotate with hand - smoother rotation
+          targetRotationX += gestureData.rotation.x * 0.05; 
+          targetRotationY += gestureData.rotation.y * 0.05;
         }
+        
+        isAutoRotating = false;
+      } else if (!isAutoRotating) {
+        // Transition to auto-rotation smoothly
+        autoRotVelocity.x = (autoRotVelocity.x * 0.95) + (rotationSpeed * 0.05);
+        autoRotVelocity.y = (autoRotVelocity.y * 0.95) + (rotationSpeed * 0.05);
+        isAutoRotating = autoRotVelocity.x > rotationSpeed * 0.9;
       } else {
-        // Default gentle rotation when no hand is detected
-        targetRotationX += rotationSpeed;
-        targetRotationY += rotationSpeed;
+        // Full auto-rotation
+        targetRotationX += autoRotVelocity.x;
+        targetRotationY += autoRotVelocity.y;
       }
       
-      // Smooth transition to target values
-      cube.rotation.x += (targetRotationX - cube.rotation.x) * 0.1;
-      cube.rotation.y += (targetRotationY - cube.rotation.y) * 0.1;
+      // Smooth transition to target values - adaptive smoothing
+      const rotationLerpFactor = gestureData ? 0.15 : 0.05;
+      cube.rotation.x += (targetRotationX - cube.rotation.x) * rotationLerpFactor;
+      cube.rotation.y += (targetRotationY - cube.rotation.y) * rotationLerpFactor;
       
-      // Apply scale uniformly to all axes
+      // Apply scale uniformly to all axes with improved smoothing
       const currentScale = cube.scale.x;
-      cube.scale.set(
-        currentScale + (targetScale - currentScale) * 0.1,
-        currentScale + (targetScale - currentScale) * 0.1,
-        currentScale + (targetScale - currentScale) * 0.1
-      );
+      const scaleLerpFactor = gestureData?.isPinching ? 0.2 : 0.05;
+      const newScale = currentScale + (targetScale - currentScale) * scaleLerpFactor;
+      
+      cube.scale.set(newScale, newScale, newScale);
       
       renderer.render(scene, camera);
     };
