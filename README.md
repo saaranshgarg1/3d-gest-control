@@ -1,12 +1,16 @@
-# React + Vite
+# 3D Gesture Control Interface
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Project Overview
+A real-time gesture-based interface allowing users to manipulate 3D objects using hand movements captured through a webcam. Built with React, Three.js, and MediaPipe's hand tracking technology.
 
-Currently, two official plugins are available:
+## Key Features
+- **Intuitive Gesture Recognition**: Control 3D object rotation by moving your hand in space
+- **Pinch-to-Zoom Functionality**: Dynamically resize the 3D model using pinch gestures
+- **Real-time Processing**: Low-latency hand tracking and rendering for responsive interaction
+- **Responsive Design**: Adapts to different screen sizes while maintaining performance
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript and enable type-aware lint rules. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Technologies
+- React.js for UI architecture
+- Three.js for 3D rendering and manipulation
+- MediaPipe Hands for advanced hand tracking
+- Vite for optimized development and production builds
